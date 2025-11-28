@@ -1,7 +1,9 @@
 import os
 import re
 import secrets
+import string
 from datetime import datetime
+from itertools import count
 
 import discord
 from discord.ext import commands
@@ -61,12 +63,15 @@ class Roll(commands.Cog):
     #   MATCH !rX / !rollX
     # ---------------------------
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(
+        self,
+        message,
+    ):
         if message.author.bot:
             return
 
         content = message.content.strip().lower()
-        match = re.match(r"!r(\d)$", content) or re.match(r"!roll(\d)$", content)
+        match = re.match(r"!(?:r|roll)(\d)$", content)
 
         if match:
             x = int(match.group(1))
@@ -78,7 +83,7 @@ class Roll(commands.Cog):
     #   COMMANDE ROLL — OPTION C + succès physiques
     # ---------------------------
     @commands.command(aliases=["r"])
-    async def roll(self, ctx, x: int = 0):
+    async def roll(self, ctx, x: int = 0, variable_name: str = ""):
         """OSIRE roll (Option C + succès physiques)."""
 
         try:
@@ -90,19 +95,26 @@ class Roll(commands.Cog):
             return await ctx.send(
                 "Le nombre de dés Bonus doit être compris entre **0** et **3**."
             )
-
+        print("----------------- RESET -------------------")
         # Tirages
         base = [secrets.randbelow(6) + 1 for _ in range(3)]
         bonus = [secrets.randbelow(6) + 1 for _ in range(x)]
+        de_variable = secrets.randbelow(6) + 1
 
         title = f"🎲 Jet de 3D6 Auto{' + ' + str(x) + 'D6 Bonus' if x > 0 else ''}"
+
+        # Dé variable
+        if variable_name.lower() == "s":
+            variable_name = "surcharge"
+        elif variable_name.lower() == "o":
+            variable_name = "overload"
 
         # ---------------------------
         # SUCCÈS PHYSIQUES
         # ---------------------------
         count_sixes = base.count(6)
-        crit_success = count_sixes == 3  # 3×6 physiques
-        auto_success = count_sixes >= 2 and not crit_success  # 2×6 physiques
+        crit_success = True if count_sixes == 3 else False
+        auto_success = True if count_sixes == 2 else False
 
         # ---------------------------
         # PERFORMANCE (best2 global)
@@ -115,6 +127,22 @@ class Roll(commands.Cog):
         # ---------------------------
         strain = sum(sorted(base)[:2])
 
+        # Surcharge
+        surcharge = False
+        surcharge_sixes = 0
+        print(f"Six de base = {count_sixes}")
+        print(f"Six bonus = {bonus.count(6)}")
+        print(f"Dé variable = {de_variable}")
+        if count_sixes <= 1:
+            surcharge_sixes = count_sixes + bonus.count(6)
+            if variable_name == "surcharge" and de_variable >= 4:
+                de_variable = 6
+                print(f"Dé variable post = {de_variable}")
+                surcharge_sixes += 1
+            if surcharge_sixes >= 3:
+                surcharge = True
+        print(f"Qte de 6 de surcharge : {surcharge_sixes}")
+
         # ---------------------------
         # TOTAL OPTION C
         # ---------------------------
@@ -124,10 +152,11 @@ class Roll(commands.Cog):
         # ---------------------------
         # DÉSYNC
         # ---------------------------
-        desync_txt = ""
-        surcharge_txt = ""
+        desync = False
         bonus_sum = 0
         threshold = 0
+        desync_txt = ""
+        surcharge_txt = ""
 
         if x > 0:
             thresholds = {1: 2, 2: 5, 3: 10}
@@ -136,10 +165,7 @@ class Roll(commands.Cog):
 
             if bonus_sum < threshold:
                 desync_txt = f"Désynchronisation: bonus_sum={bonus_sum} < {threshold}"
-
-        # Surcharge
-        if x == 3 and bonus == [6, 6, 6]:
-            surcharge_txt = "Surcharge: Triple 6"
+                desync = True
 
         # ---------------------------
         # EMBED
@@ -154,9 +180,17 @@ class Roll(commands.Cog):
         embed.add_field(
             name="Dés Physiques", value=", ".join(str(d) for d in base), inline=False
         )
+
         if x > 0:
             embed.add_field(
                 name="Dés Bonus", value=", ".join(str(d) for d in bonus), inline=False
+            )
+
+        if variable_name == "surcharge":
+            embed.add_field(
+                name="Dé de Surcharge",
+                value=de_variable,
+                inline=False,
             )
 
         embed.add_field(
@@ -186,7 +220,7 @@ class Roll(commands.Cog):
             )
 
         # Désynchronisation (sauf si succès critique)
-        if desync_txt and not crit_success:
+        if desync and not (crit_success or auto_success):
             embed.add_field(
                 name="⚠ Désynchronisation",
                 value=f"Somme des bonus = {bonus_sum} < seuil {threshold}",
@@ -194,7 +228,7 @@ class Roll(commands.Cog):
             )
 
         # Surcharge (sauf si critique)
-        if surcharge_txt and not crit_success:
+        if surcharge and not (crit_success or auto_success):
             embed.add_field(name="Surcharge", value="**Triple 6**", inline=False)
 
         # ---------------------------
