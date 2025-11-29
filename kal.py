@@ -1,4 +1,6 @@
+import asyncio
 import os
+from typing import cast
 
 import discord
 from discord.ext import commands
@@ -6,32 +8,25 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-token = os.getenv("DISCORD_TOKEN")
-TOKEN = token
+TOKEN = cast(str, os.getenv("DISCORD_TOKEN"))
 
-# Intents: needed for reading messages
 intents = discord.Intents.default()
-intents.message_content = True  # IMPORTANT for text commands
+intents.message_content = True
 
-# Prefix: what your commands start with (!ping, !hello, etc.)
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 @bot.event
 async def on_ready():
-    await bot.load_extension("cogs.roll")
+    await bot.tree.sync()
     print("Kal-os is running.")
 
 
-# Simple command: !ping
-@bot.command()
-async def ping(ctx):
-    await ctx.send("Pong!")
+async def main():
+    async with bot:
+        await bot.load_extension("cogs.roll")
+        await bot.start(TOKEN)
 
 
 if __name__ == "__main__":
-    if not TOKEN:
-        raise RuntimeError(
-            "No bot token found. Set DISCORD_BOT_TOKEN env variable or hard-code TOKEN."
-        )
-    bot.run(TOKEN)
+    asyncio.run(main())
