@@ -70,7 +70,7 @@ class Roll(commands.Cog):
         # ---------------------------
         # TOTAL
         # ---------------------------
-        total = round((2 * performance + strain) / 3)
+        total = round((3 * performance + 2 * strain) / 5)
 
         # ---------------------------
         # DÉSYNC
